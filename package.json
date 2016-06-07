@@ -1,0 +1,40 @@
+{
+	"name": "build-platformio",
+	"version": "1.2.2",
+	"description": "Build service provider for PlatformIO",
+	"main": "./main",
+	"keywords": [
+		"PlatformIO",
+		"IoT",
+		"embedded",
+		"arduino",
+		"mbed",
+		"build",
+		"fpga"
+	],
+	"license": "GPL-2.0",
+	"engines": {
+		"atom": ">=1.0.0 <2.0.0"
+	},
+	"providedServices": {
+		"builder": {
+			"description": "PlatformIO Build Provider for Atom",
+			"versions": {
+				"2.0.0": "provideBuilder"
+			}
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/mdeboer/build-platformio.git"
+	},
+	"bugs": {
+		"url": "https://github.com/mdeboer/build-platformio/issues"
+	},
+	"homepage": "https://github.com/mdeboer/build-platformio",
+	"dependencies": {
+		"ini": "^1.3.4",
+		"promisify-node": "^0.4.0"
+	},
+	"readmeFilename": "README.md"
+}
