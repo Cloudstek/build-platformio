@@ -1,6 +1,6 @@
 {
 	"name": "build-platformio",
-	"version": "1.2.2",
+	"version": "1.2.3",
 	"description": "Build service provider for PlatformIO",
 	"main": "./main",
 	"keywords": [
