@@ -122,10 +122,6 @@ export class PlatformIOBuildProvider {
           }
         }
 
-        if (atom.config.get('platformio-ide.autoCloseSerialMonitor')) {
-          settings = settings.map(assignHooks);
-        }
-
         resolve(settings);
       });
     });
