@@ -1,6 +1,6 @@
-# PlatformIO build provider for Atom [![Donate for PlatformIO.Org](https://img.shields.io/donate/PlatformIO.png)](http://platformio.org/donate)
+# PlatformIO build provider for Atom
 
-This is the stand-alone stripped down PlatformIO build service provider for Atom from the `platformio-ide` package. It's modified to reduce the number of needed libraries and therefore has no integration with `platformio-ide-terminal` nor does it ship with the platformio cli tools. See the [official documentation](http://docs.platformio.org/en/latest/installation.html) on how to install the cli tools on your platform.
+This is the stand-alone stripped down PlatformIO build service provider for Atom from the `platformio-ide` package. It's modified to reduce the number of needed libraries and therefore has no integration with `platformio-ide-terminal` and debugger nor does it ship with the platformio cli tools. See the [official documentation](http://docs.platformio.org/en/latest/installation.html) on how to install the cli tools on your platform.
 
 Use this package if you only require the build tools integration. If you want to use all features please disable this package and install the `platformio-ide` package.
 

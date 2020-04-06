@@ -1,166 +1,132 @@
-'use babel';
+/** @babel */
 
 /**
- * Copyright (C) 2016 Ivan Kravets. All rights reserved.
+ * Copyright (c) 2016-present PlatformIO <contact@platformio.org>
+ * All rights reserved.
  *
- * This source file is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * This source code is licensed under the license found in the LICENSE file in
+ * the root directory of this source tree.
  */
 
- import fs from 'fs';
- import ini from 'ini';
- import path from 'path';
- import {clone, isPioProject} from './utils';
+import * as pioNodeHelpers from 'platformio-node-helpers';
 
- const ENV_NAME_PREFIX = 'env:';
+import fs from 'fs';
 
- export class PlatformIOBuildProvider {
-     constructor(cwd) {
-         this.cwd = cwd;
-         this.platformioIniPath = path.join(this.cwd, 'platformio.ini');
-         this.title = 'PlatformIO';
-         this.targetNamePrefix = this.title + ': ';
+export default class BuildProvider {
 
-         this.targetsBaseSettings = [
-             {
-                 name: 'Build',
-                 args: ['run'],
-                 keymap: 'ctrl-alt-b',
-             },
-             {
-                 name: 'Clean',
-                 args: ['run', '--target', 'clean'],
-                 keymap: 'ctrl-alt-c',
-             },
-             {
-                 name: 'Upload',
-                 args: ['run', '--target', 'upload'],
-                 keymap: 'ctrl-alt-u',
-             },
-             {
-                 name: 'Upload using Programmer',
-                 args: ['run', '--target', 'program'],
-             },
-             {
-                 name: 'Upload SPIFFS image',
-                 args: ['run', '--target', 'uploadfs'],
-             }
-         ];
-     }
+    constructor(cwd) {
+        this.projectDir = fs.realpathSync(cwd);
+    }
 
-     getNiceName() {
-         return this.title;
-     }
+    getNiceName() {
+        return 'PlatformIO';
+    }
 
-     isEligible() {
-         return isPioProject(this.cwd);
-     }
+    isEligible() {
+        return pioNodeHelpers.misc.isPIOProject(this.projectDir);
+    }
 
-     settings() {
-         return new Promise((resolve, reject) => {
-             fs.readFile(this.platformioIniPath, (err, data) => {
-                 if (err) {
-                     reject(err);
-                 }
-                 let settings = this.prepareSettings(this.targetsBaseSettings);
+    async settings() {
+        const pt = new pioNodeHelpers.project.ProjectTasks(this.projectDir, 'atom');
+        return (await pt.getTasks())
+            .filter(task => !(task.coreTarget === 'upload' && task.args.includes('monitor')))
+            .map(task => {
+                    if (task.coreTarget === 'debug') {
+                        task.name = 'Debug';
+                        task.description = undefined;
+                    }
+                    return this.makeSetting(task);
+                }
+            );
+    }
 
-                 const envs = [];
-                 const boards = {};
-                 const config = ini.parse(data.toString());
-                 for (const section of Object.keys(config)) {
-                     if (section.startsWith(ENV_NAME_PREFIX)) {
-                         const envName = section.slice(ENV_NAME_PREFIX.length);
-                         envs.push(envName);
-                         boards[envName] = config[section].board;
-                     }
-                 }
+    makeSetting(projectTask) {
+        const proxy = new Proxy(
+            new AtomBuildTarget(this.projectDir, projectTask),
+            {
+                get(oTarget, propKey) {
+                    return Reflect.get(oTarget, propKey);
+                },
+                ownKeys(oTarget) {
+                    return Object.getOwnPropertyNames(
+                        Object.getPrototypeOf(oTarget)
+                    ).filter(key => key !== 'constructor');
+                }
+            }
+        );
+        const setting = {};
+        Reflect.ownKeys(proxy).forEach(key => {
+            if (!key.startsWith('_') && proxy[key] !== undefined) {
+                setting[key] = proxy[key];
+            }
+        });
+        return setting;
+    }
 
-                 if (envs.length > 0) {
-                     let espressifFound = false;
-                     let atmelavrFound = false;
-                     for (const env of envs) {
-                         const platform = config[ENV_NAME_PREFIX + env].platform;
-                         if ('espressif' === platform) {
-                             espressifFound = true;
-                         }
-                         if ('atmelavr' === platform) {
-                             atmelavrFound = true;
-                         }
-                     }
-                     if (!espressifFound) {
-                         settings = settings.filter(argsDoNotContain('uploadfs'));
-                     }
-                     if (!atmelavrFound) {
-                         settings = settings.filter(argsDoNotContain('program'));
-                     }
-                 }
+}
 
-                 if (envs.length > 1) {
-                     for (const env of envs) {
-                         let envSettings = this
-                         .prepareSettings(this.targetsBaseSettings)
-                         .map(makeEnvSpecificTarget(env));
-                         const platform = config[ENV_NAME_PREFIX + env].platform;
-                         if ('espressif' !== platform) {
-                             envSettings = envSettings.filter(argsDoNotContain('uploadfs'));
-                         }
-                         if ('atmelavr' !== platform) {
-                             envSettings = envSettings.filter(argsDoNotContain('program'));
-                         }
 
-                         settings = settings.concat(envSettings);
-                     }
-                 }
+class AtomBuildTarget {
 
-                 resolve(settings);
-             });
-         });
+    constructor(projectDir, projectTask) {
+        this._projectDir = projectDir;
+        this._projectTask = projectTask;
+    }
 
-         function makeEnvSpecificTarget(env) {
-             return function(base) {
-                 const item = clone(base);
-                 item.name += ` (env:${env})`;
-                 item.args.push('--environment');
-                 item.args.push(env);
-                 delete item.keymap;
-                 delete item.atomCommandName;
-                 return item;
-             };
-         }
+    get name() {
+        return `PIO ${this._projectTask.title}`;
+    }
 
-         function argsDoNotContain(arg) {
-             return function(item) {
-                 return item.args.indexOf(arg) === -1;
-             };
-         }
-     }
+    get args() {
+        return this._projectTask.args;
+    }
 
-     prepareSettings(baseSettings) {
-         return baseSettings.map(base => {
-             const item = clone(base);
-             item.name = this.targetNamePrefix + base.name;
-             item.exec = 'platformio';
-             item.sh = false;
-             item.env = Object.create(process.env);
-             item.env.PLATFORMIO_FORCE_COLOR = 'true';
-             item.env.PLATFORMIO_DISABLE_PROGRESSBAR = 'true';
-             item.env.PLATFORMIO_SETTING_ENABLE_PROMPTS = 'false';
-             item.errorMatch = [
-                 '\n\\x1B\\[31m(?<file>src[\\/0-9a-zA-Z\\._\\\\]+):(?<line>\\d+):(?<col>\\d+)'
-             ];
-             item.atomCommandName = `platformio-ide:target:${base.name.toLowerCase()}-${this.cwd}`;
+    get exec() {
+        return 'platformio';
+    }
 
-             return item;
-         });
-     }
- }
+    get sh() {
+        return false;
+    }
+
+    get keymap() {
+        switch (this._projectTask.coreTarget) {
+            case 'upload':
+                return 'ctrl-alt-u';
+            case 'clean':
+                return 'ctrl-alt-c';
+            case 'test':
+                return 'ctrl-alt-t';
+        }
+        return 'ctrl-alt-b';
+    }
+
+    get env() {
+        return Object.assign({}, process.env, {
+            PLATFORMIO_FORCE_COLOR: 'true',
+            PLATFORMIO_DISABLE_PROGRESSBAR: 'true',
+            PLATFORMIO_SETTING_ENABLE_PROMPTS: 'false'
+        });
+    }
+
+    get errorMatch() {
+        return '\\[31m(?<file>src[\\/0-9a-zA-Z\\._\\\\]+):(?<line>\\d+):(?<col>\\d+):\\s+(?<message>[^\\[]+)\\[0m';
+    }
+
+    get atomCommandName() {
+        if (this._projectTask.coreEnv) {
+            return undefined;
+        }
+        return `platformio-ide:target:${this._projectTask.id.toLowerCase()}-${this._projectDir}`;
+    }
+
+    get preBuild() {
+        return () => {
+        };
+    }
+
+    get postBuild() {
+        return async (buildOutcome, stdout, stderr) => {
+        };
+    }
+}
